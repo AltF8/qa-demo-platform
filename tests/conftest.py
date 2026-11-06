@@ -1,5 +1,6 @@
-import pytest_asyncio
 from collections.abc import AsyncIterator
+
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -8,7 +9,7 @@ from app.main import app
 @pytest_asyncio.fixture
 async def async_client() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
-      transport=ASGITransport(app=app),
-      base_url="http://test",
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as client:
-      yield client
+        yield client

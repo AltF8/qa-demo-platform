@@ -1,0 +1,39 @@
+
+
+# ============================================================
+# Ruff - linting and formatting
+# ============================================================
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E4",  # Import errors
+    "E7",  # Statement formatting
+    "E9",  # Syntax errors
+    "F",   # Pyflakes
+    "I",   # Import sorting
+    "B",   # Bugbear
+]
+
+# ============================================================
+# BasedPyright - type checking
+# ============================================================
+
+[tool.basedpyright]
+typeCheckingMode = "basic"
+
+
+# ============================================================
+# Pytest
+# ============================================================
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+# Async tests
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"

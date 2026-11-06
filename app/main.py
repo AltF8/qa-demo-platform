@@ -9,6 +9,6 @@ app = FastAPI(
 @app.get("/health")
 def health_check():
     return {
-      "status": "healthy",
-      "service": "qa-demo-platform",
+        "status": "healthy",
+        "service": "qa-demo-platform",
     }

@@ -218,3 +218,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local environment files
+.env.*
+!.env.example
+
+# Type checker
+.pyright/
+
+# Debugger
+*.pudb
+
+# Test reports
+allure-results/
+allure-report/
+test-results/
+playwright-report/
+
+# macOS
+.DS_Store
+
+# Editor temporary files
+*.swp
+*.swo
