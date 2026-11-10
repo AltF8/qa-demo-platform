@@ -26,7 +26,7 @@ def user_data() -> dict[str, Any]:
 
 
 @pytest_asyncio.fixture
-async def create_user(async_client: AsyncClient, user_data: dict) -> Response:
+async def create_user(async_client: AsyncClient, user_data: dict[str, Any]) -> Response:
     response = await async_client.post("/users", json=user_data)
     return response
 
@@ -140,3 +140,75 @@ async def test_create_user_boundary_values(
 
     assert response.status_code == 201
     assert response.json()[field] == value
+
+
+@pytest.mark.asyncio
+async def test_get_users_empty(async_client: AsyncClient) -> None:
+    response = await async_client.get(url="/users")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_get_users_multiple(
+    async_client: AsyncClient, create_user: Response, user_data: dict[str, Any]
+) -> None:
+    assert create_user.status_code == 201
+    users = [create_user.json()]
+
+    user_data["name"] = "Bob"
+    user_data["email"] = "bob@example.com"
+    user_data["age"] = 30
+
+    create_response = await async_client.post(url="/users", json=user_data)
+    assert create_response.status_code == 201
+    users.append(create_response.json())
+
+    list_response = await async_client.get(url="/users")
+    assert list_response.status_code == 200
+
+    actual_users = list_response.json()
+
+    for user in users:
+        assert user in actual_users
+    assert len(users) == len(actual_users)
+
+
+@pytest.mark.asyncio
+async def test_delete_user(async_client: AsyncClient, create_user: Response) -> None:
+    assert create_user.status_code == 201
+
+    user_id = create_user.json()["id"]
+    delete_response = await async_client.delete(url=f"/users/{user_id}")
+
+    assert delete_response.status_code == 204
+    assert delete_response.content == b""
+
+    get_response = await async_client.get(url=f"/users/{user_id}")
+
+    assert get_response.status_code == 404
+    assert get_response.json() == {"detail": "User not found"}
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_user(async_client: AsyncClient) -> None:
+    response = await async_client.delete(url="/users/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "User not found"}
+
+
+@pytest.mark.asyncio
+async def test_delete_user_twice(async_client: AsyncClient, create_user: Response) -> None:
+    assert create_user.status_code == 201
+
+    user_id = create_user.json()["id"]
+    first_delete_response = await async_client.delete(url=f"/users/{user_id}")
+
+    assert first_delete_response.status_code == 204
+    assert first_delete_response.content == b""
+
+    second_delete_response = await async_client.delete(url=f"/users/{user_id}")
+
+    assert second_delete_response.status_code == 404
+    assert second_delete_response.json() == {"detail": "User not found"}

@@ -55,6 +55,20 @@ def create_user(data: UserCreate) -> UserResponse:
     )
 
 
+@router.get("/users", response_model=list[UserResponse])
+def get_users() -> list[UserResponse]:
+    return [
+        UserResponse(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            age=user.age,
+            is_active=user.is_active,
+        )
+        for user in User._users.values()
+    ]
+
+
 @router.get("/users/{user_id}", response_model=UserResponse)
 def get_user(user_id: int) -> UserResponse:
     user = User.get_by_id(user_id)
@@ -71,3 +85,16 @@ def get_user(user_id: int) -> UserResponse:
         age=user.age,
         is_active=user.is_active,
     )
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: int) -> None:
+    user = User.get_by_id(user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    del User._users[user_id]
