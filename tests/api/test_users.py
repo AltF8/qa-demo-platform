@@ -143,6 +143,22 @@ async def test_create_user_boundary_values(
 
 
 @pytest.mark.asyncio
+async def test_create_user_with_unknown_parameters(
+    async_client: AsyncClient, user_data: dict[str, Any]
+) -> None:
+    user_data["page"] = 30
+    response = await async_client.post(url="/users", json=user_data)
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "extra_forbidden"
+    assert response.json()["detail"][0]["loc"] == ["body", "page"]
+
+    get_response = await async_client.get(url="/users")
+    assert get_response.status_code == 200
+    assert not get_response.json()
+
+
+@pytest.mark.asyncio
 async def test_get_users_empty(async_client: AsyncClient) -> None:
     response = await async_client.get(url="/users")
     assert response.status_code == 200
@@ -212,3 +228,194 @@ async def test_delete_user_twice(async_client: AsyncClient, create_user: Respons
 
     assert second_delete_response.status_code == 404
     assert second_delete_response.json() == {"detail": "User not found"}
+
+
+@pytest.mark.asyncio
+async def test_update_user(
+    async_client: AsyncClient, create_user: Response, user_data: dict[str, Any]
+) -> None:
+    assert create_user.status_code == 201
+
+    user_id = create_user.json()["id"]
+    update_user_data = {
+        "name": "Bob",
+        "age": 30,
+    }
+
+    update_response = await async_client.patch(url=f"/users/{user_id}", json=update_user_data)
+
+    assert update_response.status_code == 200
+
+    for key, value in update_user_data.items():
+        user_data[key] = value
+    for key, value in user_data.items():
+        assert update_response.json()[key] == value
+
+    get_response = await async_client.get(url=f"/users/{user_id}")
+    assert get_response.status_code == 200
+    for key, value in user_data.items():
+        assert get_response.json()[key] == value
+
+
+@pytest.mark.asyncio
+async def test_update_unknown_user(async_client: AsyncClient) -> None:
+    updates = {
+        "name": "Bob",
+        "age": 30,
+    }
+
+    response = await async_client.patch(url="/users/999999", json=updates)
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "User not found"}
+
+
+@pytest.mark.asyncio
+async def test_update_with_other_users_email(
+    async_client: AsyncClient, create_user: Response
+) -> None:
+    assert create_user.status_code == 201
+
+    user_data = {
+        "name": "Bob",
+        "email": "bob@example.com",
+        "age": 30,
+        "is_active": True,
+    }
+    create_response = await async_client.post(url="/users", json=user_data)
+    assert create_response.status_code == 201
+
+    user_id = create_response.json()["id"]
+    invalid_user_data = user_data.copy()
+    invalid_user_data["email"] = create_user.json()["email"]
+
+    update_response = await async_client.patch(url=f"/users/{user_id}", json=invalid_user_data)
+
+    assert update_response.status_code == 409
+    assert update_response.json()["detail"] == "Email already exists"
+
+    get_response = await async_client.get(url=f"/users/{user_id}")
+    assert get_response.status_code == 200
+
+    for key, value in user_data.items():
+        assert get_response.json()[key] == value
+
+
+@pytest.mark.asyncio
+async def test_update_with_the_same_data(
+    async_client: AsyncClient, create_user: Response, user_data: dict[str, Any]
+) -> None:
+    assert create_user.status_code == 201
+
+    user_id = create_user.json()["id"]
+    response = await async_client.patch(url=f"/users/{user_id}", json=user_data)
+
+    assert response.status_code == 200
+    assert create_user.json() == response.json()
+
+
+@pytest.mark.asyncio
+async def test_user_update_with_empty_body(
+    async_client: AsyncClient, create_user: Response
+) -> None:
+    assert create_user.status_code == 201
+
+    user_data = {}
+    user_id = create_user.json()["id"]
+    update_response = await async_client.patch(url=f"/users/{user_id}", json=user_data)
+
+    assert update_response.status_code == 200
+    assert create_user.json() == update_response.json()
+
+
+@pytest.mark.parametrize(
+    "field,invalid_value,expected_error",
+    [
+        ("name", "A", "string_too_short"),
+        ("name", "", "string_too_short"),
+        ("name", "A" * 51, "string_too_long"),
+        ("email", "not-an-email", "value_error"),
+        ("age", 17, "greater_than_equal"),
+        ("age", 121, "less_than_equal"),
+        ("age", "hello", "int_parsing"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_update_user_validation(
+    async_client: AsyncClient,
+    create_user: Response,
+    user_data: dict[str, Any],
+    field: str,
+    invalid_value: Any,
+    expected_error: str,
+) -> None:
+    assert create_user.status_code == 201
+
+    user_data[field] = invalid_value
+    user_id = create_user.json()["id"]
+
+    response = await async_client.patch(url=f"/users/{user_id}", json=user_data)
+
+    assert response.status_code == 422
+
+    errors = response.json()["detail"]
+
+    assert len(errors) == 1
+    assert errors[0]["loc"] == ["body", field]
+    assert errors[0]["type"] == expected_error
+
+    invalid_data = {field: invalid_value}
+    response = await async_client.patch(url=f"/users/{user_id}", json=invalid_data)
+
+    assert response.status_code == 422
+
+    errors = response.json()["detail"]
+
+    assert len(errors) == 1
+    assert errors[0]["loc"] == ["body", field]
+    assert errors[0]["type"] == expected_error
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("age", 18),
+        ("age", 120),
+        ("name", "AB"),
+        ("name", "A" * 50),
+    ],
+)
+@pytest.mark.asyncio
+async def test_update_user_boundary_values(
+    async_client: AsyncClient,
+    create_user: Response,
+    user_data: dict[str, Any],
+    field: str,
+    value: Any,
+) -> None:
+    assert create_user.status_code == 201
+
+    user_data[field] = value
+    user_id = create_user.json()["id"]
+    response = await async_client.patch(url=f"/users/{user_id}", json=user_data)
+
+    assert response.status_code == 200
+    assert response.json()[field] == value
+
+
+@pytest.mark.asyncio
+async def test_update_user_with_unknown_parameters(
+    async_client: AsyncClient, create_user: Response, user_data: dict[str, Any]
+) -> None:
+    assert create_user.status_code == 201
+
+    user_data["page"] = 30
+    user_id = create_user.json()["id"]
+    response = await async_client.patch(url=f"/users/{user_id}", json=user_data)
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "extra_forbidden"
+    assert response.json()["detail"][0]["loc"] == ["body", "page"]
+
+    get_response = await async_client.get(url=f"/users/{user_id}")
+    assert get_response.json() == create_user.json()

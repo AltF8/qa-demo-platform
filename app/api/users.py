@@ -2,7 +2,7 @@ from itertools import count
 
 from fastapi import APIRouter, HTTPException
 
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 
 class User:
@@ -36,8 +36,8 @@ def create_user(data: UserCreate) -> UserResponse:
 
     if any(user.email == email for user in User._users.values()):
         raise HTTPException(
-            409,
-            "Email already exists",
+            status_code=409,
+            detail="Email already exists",
         )
     user = User(
         name=data.name,
@@ -98,3 +98,40 @@ def delete_user(user_id: int) -> None:
         )
 
     del User._users[user_id]
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse)
+def update_user(user_id: int, data: UserUpdate) -> UserResponse:
+    user = User.get_by_id(user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    updates = data.model_dump(exclude_unset=True)
+
+    if "email" in updates:
+        email = str(updates["email"].lower())
+        updates["email"] = email
+
+        if any(
+            other_user.email == email and other_user.id != user_id
+            for other_user in User._users.values()
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Email already exists",
+            )
+
+    for key, value in updates.items():
+        setattr(user, key, value)
+
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        age=user.age,
+        is_active=user.is_active,
+    )
